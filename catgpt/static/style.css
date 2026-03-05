@@ -1,0 +1,276 @@
+:root {
+  --bg0: #fff7e8;
+  --bg1: #ffe8c9;
+  --bg2: #ffd2b2;
+  --ink: #2f2131;
+  --card: #fff9f4dd;
+  --line: #f6caa8;
+  --cat: #ff8f57;
+  --human: #6f5bd3;
+  --shadow: 0 18px 46px -26px rgba(58, 31, 45, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: "Avenir Next", "Trebuchet MS", "Gill Sans", "Comic Sans MS", sans-serif;
+  background: radial-gradient(1200px 500px at 10% 0%, var(--bg1), transparent 62%),
+    radial-gradient(1000px 500px at 85% 100%, var(--bg2), transparent 62%),
+    linear-gradient(160deg, var(--bg0), #fffefb 60%);
+}
+
+.bg-orb {
+  position: fixed;
+  border-radius: 999px;
+  filter: blur(8px);
+  opacity: 0.45;
+  z-index: -1;
+  animation: drift 8s ease-in-out infinite alternate;
+}
+
+.orb-a {
+  width: 260px;
+  height: 260px;
+  left: -70px;
+  top: 40px;
+  background: #ffc286;
+}
+
+.orb-b {
+  width: 280px;
+  height: 280px;
+  right: -90px;
+  bottom: 10px;
+  background: #ffc6cf;
+  animation-delay: -2s;
+}
+
+.app-shell {
+  max-width: 760px;
+  height: calc(100dvh - 56px);
+  margin: 28px auto;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.eyebrow {
+  margin: 0;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+h1 {
+  margin: 3px 0 0;
+  font-size: 2rem;
+}
+
+.cat-face {
+  font-size: 1.75rem;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff3ea;
+  animation: bob 2.2s ease-in-out infinite;
+}
+
+.statusbar {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.label {
+  font-size: 0.84rem;
+  opacity: 0.7;
+}
+
+.mood-pill {
+  display: inline-block;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  background: #ffe9db;
+  color: #874f2b;
+  transition: transform 180ms ease, background 180ms ease;
+}
+
+.mood-pill.bump {
+  transform: scale(1.07);
+}
+
+.mood-pill[data-mood="PLAYFUL"] {
+  background: #ffe58c;
+  color: #5b4710;
+  border-color: #f1cb55;
+}
+
+.mood-pill[data-mood="HUNGRY"] {
+  background: #ffd2a8;
+  color: #7e3300;
+  border-color: #ffaf6c;
+}
+
+.mood-pill[data-mood="SLEEPY"] {
+  background: #d8d4ff;
+  color: #3f317d;
+  border-color: #b7abff;
+}
+
+.mood-pill[data-mood="GRUMPY"] {
+  background: #ffc0cb;
+  color: #7d1730;
+  border-color: #ff8fa7;
+}
+
+.chat-log {
+  margin-top: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: #fffdf9;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bubble {
+  max-width: 86%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  line-height: 1.35;
+  font-size: 0.98rem;
+  animation: rise 190ms ease;
+  word-break: break-word;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  color: #fff;
+  background: linear-gradient(160deg, #7d67e4, var(--human));
+}
+
+.bubble.cat {
+  align-self: flex-start;
+  background: linear-gradient(160deg, #ffd9bd, #ffeede);
+  border: 1px solid #ffcba6;
+}
+
+.bubble.typing {
+  opacity: 0.78;
+  font-style: italic;
+}
+
+.meta {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  opacity: 0.58;
+}
+
+.composer {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+}
+
+input,
+button {
+  font: inherit;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+input {
+  padding: 12px;
+  background: #fff;
+}
+
+button {
+  cursor: pointer;
+  padding: 10px 14px;
+  background: var(--cat);
+  color: white;
+  border-color: #e37a44;
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+
+button.ghost {
+  background: #fff;
+  color: var(--ink);
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes bob {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    transform: translate(12px, -10px) scale(1.07);
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    margin: 0;
+    height: 100dvh;
+    border-radius: 0;
+  }
+
+  .composer {
+    grid-template-columns: 1fr;
+  }
+
+  .bubble {
+    max-width: 100%;
+  }
+}

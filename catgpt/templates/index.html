@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CatGPT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="bg-orb orb-a"></div>
+    <div class="bg-orb orb-b"></div>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Local Cat Chat</p>
+          <h1>CatGPT</h1>
+        </div>
+        <div id="cat-face" class="cat-face" aria-hidden="true">=^.^=</div>
+      </header>
+
+      <section class="statusbar">
+        <span class="label">Current Mood</span>
+        <span id="mood-pill" class="mood-pill" data-mood="{{ mood }}">{{ mood }}</span>
+      </section>
+
+      <section id="chat" class="chat-log" aria-live="polite"></section>
+
+      <form id="chat-form" class="composer" autocomplete="off">
+        <input id="message" name="message" type="text" placeholder="Say hi to the cat..." maxlength="220" required />
+        <button type="submit">Send</button>
+        <button id="reset" type="button" class="ghost">Reset Mood</button>
+      </form>
+    </main>
+    <script>
+      window.CATGPT_INIT_MOOD = "{{ mood }}";
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+</html>
