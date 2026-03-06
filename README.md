@@ -33,10 +33,3 @@ Local web UI (Flask):
 # optional instant mode:
 .venv/bin/python -m catgpt.web --checkpoint checkpoints/catgpt.pt --mode instant --port 8000
 ```
-
-## Notes
-
-- This TTC setup expects a checkpoint trained on the reasoning corpus format (`<USER>...<THINK>...</THINK><MOOD=...>...`).
-- More `--reasoning-rollouts` means more inference compute and usually more stable mood/action outputs.
-- `--mood-inertia` controls volatility (higher = stickier mood transitions).
-- `--mode instant` disables TTC and uses lightweight stochastic mood transitions + direct `<MOOD=...>` generation.
