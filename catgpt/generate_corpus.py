@@ -61,6 +61,74 @@ MOOD_SOUNDS: dict[str, list[tuple[str, float]]] = {
     ],
 }
 
+SCENARIOS = [
+    {
+        "mood": "HUNGRY",
+        "action": "seek_food",
+        "cues": ["food", "treat", "can_open", "dinner_time"],
+        "drives": ["hunger_high", "patience_low", "stomach_loud"],
+        "prompts": [
+            "do you want food",
+            "time for dinner kitty",
+            "i opened a tuna can",
+            "want a treat",
+            "are you hungry",
+        ],
+    },
+    {
+        "mood": "SLEEPY",
+        "action": "rest",
+        "cues": ["bed", "blanket", "quiet_room", "warm_lap"],
+        "drives": ["sleepiness_high", "stress_low", "cozy_seek"],
+        "prompts": [
+            "come nap on the blanket",
+            "it is sleepy time",
+            "cozy bed is ready",
+            "want to rest",
+            "you look tired",
+        ],
+    },
+    {
+        "mood": "PLAYFUL",
+        "action": "play",
+        "cues": ["toy", "laser", "string", "zoomies"],
+        "drives": ["play_drive_high", "energy_up", "curious"],
+        "prompts": [
+            "want to chase the laser",
+            "i found your toy mouse",
+            "play with this string",
+            "zoomies time",
+            "come play",
+        ],
+    },
+    {
+        "mood": "PLAYFUL",
+        "action": "seek_affection",
+        "cues": ["lap", "petting", "cuddle", "gentle_voice"],
+        "drives": ["trust_high", "social_seek", "stress_low"],
+        "prompts": [
+            "come cuddle on my lap",
+            "you are such a sweet cat",
+            "want gentle pets",
+            "come here little friend",
+            "good kitty",
+        ],
+    },
+    {
+        "mood": "GRUMPY",
+        "action": "hide",
+        "cues": ["vacuum", "loud_noise", "stranger", "bath"],
+        "drives": ["stress_high", "safety_seek", "trust_drop"],
+        "prompts": [
+            "the vacuum is loud",
+            "a stranger is here",
+            "time for a bath",
+            "that noise is scary",
+            "you seem upset",
+        ],
+    },
+]
+
 
 def pick(rng: random.Random, items: list[tuple[str, float]]) -> str:
     sounds, weights = zip(*items)
@@ -72,12 +140,32 @@ def utterance(rng: random.Random, mood: str | None, lo: int, hi: int) -> str:
     return " ".join(pick(rng, pool) for _ in range(rng.randint(lo, hi)))
 
 
+def reasoning_line(rng: random.Random, lo: int, hi: int) -> str:
+    s = rng.choice(SCENARIOS)
+    mood = s["mood"]
+    prompt = rng.choice(s["prompts"])
+    if rng.random() < 0.25:
+        prompt += "?"
+    think = (
+        f"cue={rng.choice(s['cues'])} drive={rng.choice(s['drives'])} "
+        f"action={s['action']} mood={mood}"
+    )
+    return f"<USER>{prompt}</USER><THINK>{think}</THINK><MOOD={mood}> {utterance(rng, mood, lo, hi)}"
+
+
+def free_cat_line(rng: random.Random, lo: int, hi: int, mood_prob: float) -> str:
+    mood = rng.choice(list(MOOD_SOUNDS)) if rng.random() < mood_prob else None
+    line = utterance(rng, mood, lo, hi)
+    return f"<MOOD={mood}> {line}" if mood else line
+
+
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Generate synthetic cat speech corpus")
+    p = argparse.ArgumentParser(description="Generate CatGPT corpus with reasoning traces")
     p.add_argument("--out", default="data/cat_corpus.txt")
     p.add_argument("--lines", type=int, default=1_000_000)
     p.add_argument("--seed", type=int, default=1337)
-    p.add_argument("--mood-prob", type=float, default=0.4)
+    p.add_argument("--reasoning-prob", type=float, default=0.8)
+    p.add_argument("--free-mood-prob", type=float, default=0.5)
     p.add_argument("--min-sounds", type=int, default=1)
     p.add_argument("--max-sounds", type=int, default=6)
     return p.parse_args()
@@ -86,16 +174,17 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     rng = random.Random(args.seed)
-    moods = list(MOOD_SOUNDS)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
 
     with out.open("w", encoding="utf-8") as f:
         for _ in tqdm(range(args.lines), total=args.lines, desc="Generating"):
-            mood = rng.choice(moods) if rng.random() < args.mood_prob else None
-            line = utterance(rng, mood, args.min_sounds, args.max_sounds)
-            f.write(f"<MOOD={mood}> {line}\n" if mood else f"{line}\n")
+            if rng.random() < args.reasoning_prob:
+                line = reasoning_line(rng, args.min_sounds, args.max_sounds)
+            else:
+                line = free_cat_line(rng, args.min_sounds, args.max_sounds, args.free_mood_prob)
+            f.write(line + "\n")
 
     print(f"Wrote {args.lines:,} lines to {out}")
 

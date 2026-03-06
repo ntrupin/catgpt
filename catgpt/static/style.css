@@ -99,6 +99,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .label {
@@ -108,10 +109,10 @@ h1 {
 
 .mood-pill {
   display: inline-block;
-  padding: 7px 12px;
+  padding: 4px 9px;
   border-radius: 999px;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   border: 1px solid transparent;
   background: #ffe9db;
@@ -145,6 +146,48 @@ h1 {
   background: #ffc0cb;
   color: #7d1730;
   border-color: #ff8fa7;
+}
+
+.intent-chip {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  background: #ffe9db;
+  border: 1px solid #ffcba6;
+}
+
+.reasoning-chip {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  border: 1px solid #d9d8f5;
+  background: #efeeff;
+  color: #4f4a8a;
+}
+
+.reasoning-chip.thinking {
+  background: #fff3d9;
+  border-color: #f0d39c;
+  color: #775625;
+  animation: pulse 900ms ease-in-out infinite;
+}
+
+.ttc-chip {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #fff3d9;
+  border: 1px solid #f0d39c;
+  color: #775625;
 }
 
 .chat-log {
@@ -213,6 +256,12 @@ input {
   background: #fff;
 }
 
+input:disabled,
+button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 button {
   cursor: pointer;
   padding: 10px 14px;
@@ -256,6 +305,18 @@ button.ghost {
   }
   100% {
     transform: translate(12px, -10px) scale(1.07);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 

@@ -21,6 +21,13 @@
       <section class="statusbar">
         <span class="label">Current Mood</span>
         <span id="mood-pill" class="mood-pill" data-mood="{{ mood }}">{{ mood }}</span>
+        {% if mode == "reasoning" %}
+        <span class="label">Status</span>
+        <span id="reasoning-chip" class="reasoning-chip idle">idle</span>
+        <span class="label">Intent</span>
+        <span id="intent-chip" class="intent-chip">observing</span>
+        {% endif %}
+        <span id="ttc-chip" class="ttc-chip">{% if mode == "reasoning" %}REASONING{% else %}INSTANT{% endif %}</span>
       </section>
 
       <section id="chat" class="chat-log" aria-live="polite"></section>
@@ -33,6 +40,7 @@
     </main>
     <script>
       window.CATGPT_INIT_MOOD = "{{ mood }}";
+      window.CATGPT_MODE = "{{ mode }}";
     </script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
   </body>
