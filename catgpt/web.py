@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import threading
 
@@ -32,7 +33,7 @@ def parse_args() -> argparse.Namespace:
 
 def create_app(args: argparse.Namespace) -> Flask:
     app = Flask(__name__, template_folder="templates", static_folder="static")
-    app.config["SECRET_KEY"] = "catgpt-local-dev"
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "secret_key")
 
     device = pick_device(args.device)
     model, tok, _ = load_checkpoint(args.checkpoint, device)
