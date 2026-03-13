@@ -7,14 +7,20 @@ const catFace = document.getElementById("cat-face");
 const reasoningChip = document.getElementById("reasoning-chip");
 const intentChip = document.getElementById("intent-chip");
 const ttcChip = document.getElementById("ttc-chip");
+const workspace = document.querySelector(".workspace");
+const rolloutGallery = document.getElementById("rollout-gallery");
+const rolloutSummary = document.getElementById("rollout-summary");
+const rolloutToggle = document.getElementById("rollout-toggle");
+const rolloutPanel = document.getElementById("rollout-panel");
 const sendBtn = form.querySelector('button[type="submit"]');
 const MODE = window.CATGPT_MODE || "reasoning";
-const MODE_LABEL = MODE === "reasoning" ? "REASONING" : "INSTANT";
+const MODE_LABEL = MODE === "reasoning" ? "reasoning" : "instant";
 
 const FACES = {
   PLAYFUL: "=^.^=",
   HUNGRY: "=^o^=",
   SLEEPY: "=-.-= z",
+  DREAMING: "=-.-= zz",
   GRUMPY: "=^>.<^=",
 };
 const THINKING_ACTIONS_BY_MOOD = {
@@ -45,6 +51,15 @@ const THINKING_ACTIONS_BY_MOOD = {
     "kneading through options...",
     "searching for premium sunbeam...",
   ],
+  DREAMING: [
+    "chasing spectral moths...",
+    "floating through blanket fog...",
+    "dreaming of impossible sunbeams...",
+    "padding softly through moonlight...",
+    "hearing a distant can opener...",
+    "napping inside another nap...",
+    "tracking phantom whisker signals...",
+  ],
   GRUMPY: [
     "judging from afar...",
     "preparing stealth mode...",
@@ -62,35 +77,163 @@ const THINKING_ACTIONS_BY_MOOD = {
   ],
 };
 
-function addBubble(role, text, mood = null, action = null, consensus = null) {
+function formatToken(value) {
+  return String(value || "").replaceAll("_", " ");
+}
+
+function planSummary(plan) {
+  if (!Array.isArray(plan) || !plan.length) return null;
+  return plan.map(formatToken).join(" > ");
+}
+
+function driveSummary(state = {}) {
+  const order = [
+    ["h", "hunger"],
+    ["e", "energy"],
+    ["t", "trust"],
+    ["m", "mischief"],
+  ];
+  const bits = order.filter(([, key]) => state[key]).map(([short, key]) => `${short}=${formatToken(state[key])}`);
+  return bits.length ? `drives: ${bits.join(" ")}` : null;
+}
+
+function worldSummary(state = {}) {
+  const order = ["bowl", "toy", "vacuum", "sunbeam", "box"];
+  const bits = order.filter((key) => state[key]).slice(0, 2).map((key) => `${key}=${formatToken(state[key])}`);
+  return bits.length ? `world: ${bits.join(" ")}` : null;
+}
+
+function dreamSummary(state = {}) {
+  if (!state?.dream || state.dream === "awake") return null;
+  return `dream: ${formatToken(state.dream)}`;
+}
+
+function truncate(text, max = 96) {
+  if (!text || text.length <= max) return text;
+  return `${text.slice(0, max - 1)}...`;
+}
+
+function setRolloutSummary(text) {
+  if (!rolloutSummary) return;
+  rolloutSummary.textContent = text;
+}
+
+function clearRolloutGallery(message = "The gallery fills in after a reasoning turn.", summary = "waiting") {
+  if (!rolloutGallery) return;
+  rolloutGallery.replaceChildren();
+  const empty = document.createElement("p");
+  empty.className = "rollout-empty";
+  empty.textContent = message;
+  rolloutGallery.appendChild(empty);
+  setRolloutSummary(summary);
+}
+
+function renderRolloutGallery(gallery = [], consensus = null, samples = null) {
+  if (!rolloutGallery) return;
+  rolloutGallery.replaceChildren();
+
+  if (!Array.isArray(gallery) || !gallery.length) {
+    clearRolloutGallery();
+    return;
+  }
+
+  const summary =
+    consensus != null && samples != null ? `winner ${consensus}/${samples}` : `${gallery.length} samples`;
+  setRolloutSummary(summary);
+
+  gallery.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = `rollout-card${item.winner ? " winner" : ""}`;
+
+    const top = document.createElement("div");
+    top.className = "rollout-topline";
+
+    const badges = document.createElement("div");
+    badges.className = "rollout-badges";
+
+    if (item.winner) {
+      const badge = document.createElement("span");
+      badge.className = "rollout-badge winner";
+      badge.textContent = "winner";
+      badges.appendChild(badge);
+    }
+
+    const moodBadge = document.createElement("span");
+    moodBadge.className = "rollout-badge";
+    moodBadge.textContent = formatToken(item.mood).toLowerCase();
+    badges.appendChild(moodBadge);
+
+    if (item.state?.dream && item.state.dream !== "awake") {
+      const dreamBadge = document.createElement("span");
+      dreamBadge.className = "rollout-badge dream";
+      dreamBadge.textContent = `dream ${formatToken(item.state.dream)}`;
+      badges.appendChild(dreamBadge);
+    }
+
+    const agreeBadge = document.createElement("span");
+    agreeBadge.className = "rollout-badge";
+    agreeBadge.textContent = `agree ${item.agreement ?? 1}`;
+    badges.appendChild(agreeBadge);
+
+    const score = document.createElement("div");
+    score.className = "rollout-score";
+    score.textContent = `score ${Number(item.score || 0).toFixed(2)}`;
+
+    top.appendChild(badges);
+    top.appendChild(score);
+    card.appendChild(top);
+
+    const reply = document.createElement("div");
+    reply.className = "rollout-reply";
+    reply.textContent = item.reply || "mrrp";
+    card.appendChild(reply);
+
+    const meta = document.createElement("div");
+    meta.className = "rollout-meta";
+    const metaBits = [];
+    if (item.action) metaBits.push(`intent: ${formatToken(item.action)}`);
+    if (item.state?.room) metaBits.push(`room: ${formatToken(item.state.room)}`);
+    if (item.state?.focus) metaBits.push(`focus: ${formatToken(item.state.focus)}`);
+    const dream = dreamSummary(item.state || {});
+    if (dream) metaBits.push(dream);
+    meta.textContent = metaBits.join(" · ");
+    card.appendChild(meta);
+
+    const plan = document.createElement("div");
+    plan.className = "rollout-plan";
+    plan.textContent = `plan: ${planSummary(item.plan) || "watch > blink > improvise"}`;
+    card.appendChild(plan);
+
+    const stateLine = document.createElement("div");
+    stateLine.className = "rollout-think";
+    const drives = driveSummary(item.state || {});
+    const world = worldSummary(item.state || {});
+    const stateBits = [drives, world].filter(Boolean);
+    stateLine.textContent = truncate(stateBits.join(" · ") || "state: unreadable", 110);
+    card.appendChild(stateLine);
+
+    rolloutGallery.appendChild(card);
+  });
+}
+
+function addBubble(role, text) {
   const wrap = document.createElement("div");
   wrap.className = `bubble ${role}`;
   wrap.textContent = text;
-
-  if (role === "cat") {
-    const bits = [];
-    if (mood) bits.push(`mood: ${mood.toLowerCase()}`);
-    if (MODE === "reasoning" && action) bits.push(`intent: ${action}`);
-    if (MODE === "reasoning" && consensus) bits.push(`ttc: ${consensus}`);
-    if (bits.length) {
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.textContent = bits.join(" · ");
-      wrap.appendChild(meta);
-    }
-  }
 
   chat.appendChild(wrap);
   chat.scrollTop = chat.scrollHeight;
   return wrap;
 }
 
-function setMood(mood) {
-  moodPill.dataset.mood = mood;
-  moodPill.textContent = mood;
+function setMood(mood, state = {}) {
+  const isDreaming = state?.dream && state.dream !== "awake";
+  const displayMood = isDreaming ? "DREAMING" : mood;
+  moodPill.dataset.mood = displayMood;
+  moodPill.textContent = formatToken(displayMood).toLowerCase();
   moodPill.classList.remove("bump");
   requestAnimationFrame(() => moodPill.classList.add("bump"));
-  catFace.textContent = FACES[mood] || FACES.PLAYFUL;
+  catFace.textContent = FACES[displayMood] || FACES[mood] || FACES.PLAYFUL;
 }
 
 function setIntent(action) {
@@ -138,8 +281,18 @@ function startThinkingBubble(bubble, mood) {
   bubble.textContent = randomThinkingAction(mood);
 }
 
-function setTTC() {
-  ttcChip.textContent = MODE_LABEL;
+function setTTC(consensus = null, samples = null) {
+  if (!ttcChip) return;
+  ttcChip.textContent =
+    MODE === "reasoning" && consensus != null && samples != null ? `winner ${consensus}/${samples}` : MODE_LABEL;
+}
+
+function setRolloutCollapsed(collapsed) {
+  if (!workspace || !rolloutPanel || !rolloutToggle) return;
+  workspace.classList.toggle("gallery-collapsed", collapsed);
+  rolloutPanel.setAttribute("aria-hidden", String(collapsed));
+  rolloutToggle.textContent = collapsed ? "show rollouts" : "hide rollouts";
+  rolloutToggle.setAttribute("aria-expanded", String(!collapsed));
 }
 
 async function sendMessage(message) {
@@ -148,6 +301,7 @@ async function sendMessage(message) {
     typing = addBubble("cat", "...");
     startThinkingBubble(typing, moodPill.dataset.mood || "PLAYFUL");
     setReasoning(true);
+    clearRolloutGallery("Sampling possible cat brains...", "sampling...");
   }
 
   try {
@@ -161,22 +315,20 @@ async function sendMessage(message) {
     if (typing) typing.remove();
     if (!res.ok) {
       setIntent("spooked");
-      addBubble("cat", "hiss?", "GRUMPY", "spooked");
+      addBubble("cat", "hiss?");
       return;
     }
 
-    setMood(data.mood);
+    setMood(data.mood || "PLAYFUL", data.state);
     setIntent(data.action);
-    setTTC();
-    const ttcMeta =
-      MODE === "reasoning" && data.consensus != null && data.samples != null
-        ? `${data.consensus}/${data.samples}`
-        : null;
-    addBubble("cat", data.reply, data.mood, data.action, ttcMeta);
+    setTTC(data.consensus, data.samples);
+    addBubble("cat", data.reply);
+    renderRolloutGallery(data.gallery, data.consensus, data.samples);
   } catch {
     if (typing) typing.remove();
     setIntent("confused");
-    addBubble("cat", "mrrp... (network hiccup)", "PLAYFUL", "confused");
+    addBubble("cat", "mrrp... (network hiccup)");
+    clearRolloutGallery("The rollout gallery is empty after that hiccup.", "idle");
   } finally {
     if (MODE === "reasoning") setReasoning(false);
     input.focus();
@@ -200,11 +352,21 @@ resetBtn.addEventListener("click", async () => {
   setMood(data.mood || "PLAYFUL");
   setIntent("observing");
   setTTC();
-  addBubble("cat", "*tail flick* reset.", data.mood || "PLAYFUL", "observing");
+  addBubble("cat", "*tail flick* reset.");
+  clearRolloutGallery();
 });
+
+if (rolloutToggle) {
+  rolloutToggle.addEventListener("click", () => {
+    const collapsed = !workspace?.classList.contains("gallery-collapsed");
+    setRolloutCollapsed(collapsed);
+  });
+}
 
 setMood(window.CATGPT_INIT_MOOD || "PLAYFUL");
 setIntent("observing");
 setReasoning(false);
 setTTC();
-addBubble("cat", "mrrp! say hi.", moodPill.dataset.mood, "observing");
+setRolloutCollapsed(true);
+addBubble("cat", "mrrp! say hi.");
+clearRolloutGallery();

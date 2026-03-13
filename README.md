@@ -1,6 +1,7 @@
 # CatGPT
 
 Tiny GPT-style cat model with model-internal reasoning traces and test-time compute (self-consistency over sampled traces).
+The reasoning corpus now carries persistent drives, room/object state, follow-up memory, and multi-step mischief plans.
 
 ## Quickstart
 
@@ -8,8 +9,8 @@ Tiny GPT-style cat model with model-internal reasoning traces and test-time comp
 # 1) Generate reasoning corpus
 .venv/bin/python -m catgpt.generate_corpus --lines 1000000 --out data/cat_corpus.txt
 
-# 2) Train (larger context is important for <USER>/<THINK> traces)
-.venv/bin/python -m catgpt.train --data data/cat_corpus.txt --out checkpoints/catgpt.pt --block-size 160 --steps 3000
+# 2) Train (larger context is important for stateful <USER>/<THINK> traces)
+.venv/bin/python -m catgpt.train --data data/cat_corpus.txt --out checkpoints/catgpt.pt --block-size 256 --steps 3000
 
 # 3) CLI chat with TTC
 .venv/bin/python -m catgpt.chat --checkpoint checkpoints/catgpt.pt --reasoning-rollouts 8

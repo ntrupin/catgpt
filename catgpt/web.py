@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--mode", default="reasoning", choices=["reasoning", "instant"])
     p.add_argument("--temperature", type=float, default=0.9)
     p.add_argument("--top-k", type=int, default=20)
-    p.add_argument("--max-new-tokens", type=int, default=120)
+    p.add_argument("--max-new-tokens", type=int, default=240)
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--reasoning-rollouts", type=int, default=8)
     p.add_argument("--mood-inertia", type=float, default=0.35)
@@ -160,6 +160,23 @@ def create_app(args: argparse.Namespace) -> Flask:
                 "mood": d.mood,
                 "reply": d.reply,
                 "action": d.action,
+                "plan": list(d.plan),
+                "state": d.state,
+                "gallery": [
+                    {
+                        "mood": item.mood,
+                        "reply": item.reply,
+                        "action": item.action,
+                        "plan": list(item.plan),
+                        "state": item.state,
+                        "think": item.think,
+                        "score": item.score,
+                        "avg_logprob": item.avg_logprob,
+                        "agreement": item.agreement,
+                        "winner": item.winner,
+                    }
+                    for item in d.gallery
+                ],
                 "think": d.think,
                 "consensus": d.consensus,
                 "samples": d.used_samples,

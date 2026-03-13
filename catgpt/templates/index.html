@@ -19,18 +19,39 @@
       </header>
 
       <section class="statusbar">
-        <span class="label">Current Mood</span>
-        <span id="mood-pill" class="mood-pill" data-mood="{{ mood }}">{{ mood }}</span>
+        <span class="label">Mood</span>
+        <span id="mood-pill" class="mood-pill" data-mood="{{ mood }}">{{ mood|lower }}</span>
         {% if mode == "reasoning" %}
-        <span class="label">Status</span>
+        <span class="label">State</span>
         <span id="reasoning-chip" class="reasoning-chip idle">idle</span>
         <span class="label">Intent</span>
         <span id="intent-chip" class="intent-chip">observing</span>
         {% endif %}
-        <span id="ttc-chip" class="ttc-chip">{% if mode == "reasoning" %}REASONING{% else %}INSTANT{% endif %}</span>
+        <span id="ttc-chip" class="ttc-chip">{% if mode == "reasoning" %}reasoning{% else %}instant{% endif %}</span>
+        {% if mode == "reasoning" %}
+        <button id="rollout-toggle" type="button" class="rollout-toggle" aria-expanded="false" aria-controls="rollout-panel">
+          show rollouts
+        </button>
+        {% endif %}
       </section>
 
-      <section id="chat" class="chat-log" aria-live="polite"></section>
+      <section class="workspace{% if mode == 'reasoning' %} reasoning-workspace gallery-collapsed{% endif %}">
+        <section id="chat" class="chat-log" aria-live="polite"></section>
+        {% if mode == "reasoning" %}
+        <aside id="rollout-panel" class="rollout-panel" aria-live="polite" aria-hidden="true">
+          <div class="rollout-head">
+            <div>
+              <p class="eyebrow">Rollout Gallery</p>
+              <h2>Sampled Cat Brains</h2>
+            </div>
+            <span id="rollout-summary" class="rollout-summary">waiting</span>
+          </div>
+          <div id="rollout-gallery" class="rollout-gallery">
+            <p class="rollout-empty">The gallery fills in after a reasoning turn.</p>
+          </div>
+        </aside>
+        {% endif %}
+      </section>
 
       <form id="chat-form" class="composer" autocomplete="off">
         <input id="message" name="message" type="text" placeholder="Say hi to the cat..." maxlength="220" required />

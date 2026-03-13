@@ -11,6 +11,12 @@ from .runtime import pick_device
 from .ttc import missing_reasoning_chars, ttc_turn
 
 
+def state_summary(state: dict[str, str]) -> str:
+    order = ("room", "dream", "focus", "hunger", "energy", "trust", "mischief", "bowl", "toy", "vacuum", "sunbeam", "box")
+    bits = [f"{key}={state[key]}" for key in order if key in state]
+    return " ".join(bits[:6])
+
+
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Chat with CatGPT")
     p.add_argument("--checkpoint", default="checkpoints/catgpt.pt")
@@ -18,7 +24,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--mode", default="reasoning", choices=["reasoning", "instant"])
     p.add_argument("--temperature", type=float, default=0.9)
     p.add_argument("--top-k", type=int, default=20)
-    p.add_argument("--max-new-tokens", type=int, default=120)
+    p.add_argument("--max-new-tokens", type=int, default=240)
     p.add_argument("--message", default=None)
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--reasoning-rollouts", type=int, default=8)
@@ -84,7 +90,12 @@ def main() -> None:
             )
             print(f"CatGPT ({d.mood}): {d.reply}")
             if args.show_reasoning:
-                print(f"[think={d.think}; action={d.action}; consensus={d.consensus}/{d.used_samples}]")
+                plan = ">".join(d.plan) if d.plan else "-"
+                state = state_summary(d.state) or "-"
+                print(
+                    f"[think={d.think}; action={d.action}; plan={plan}; state={state}; "
+                    f"consensus={d.consensus}/{d.used_samples}]"
+                )
         else:
             mood = next_mood("PLAYFUL", args.message, rng)
             reply = sample_instant_reply(
@@ -126,7 +137,12 @@ def main() -> None:
             history = d.history
             print(f"CatGPT ({d.mood}): {d.reply}")
             if args.show_reasoning:
-                print(f"[think={d.think}; action={d.action}; consensus={d.consensus}/{d.used_samples}]")
+                plan = ">".join(d.plan) if d.plan else "-"
+                state = state_summary(d.state) or "-"
+                print(
+                    f"[think={d.think}; action={d.action}; plan={plan}; state={state}; "
+                    f"consensus={d.consensus}/{d.used_samples}]"
+                )
         else:
             mood = next_mood(mood, msg, rng)
             reply = sample_instant_reply(
