@@ -17,7 +17,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--out", default="checkpoints/catgpt.pt")
     p.add_argument("--steps", type=int, default=3_000)
     p.add_argument("--batch-size", type=int, default=64)
-    p.add_argument("--block-size", type=int, default=256)
+    p.add_argument("--block-size", type=int, default=320)
     p.add_argument("--layers", type=int, default=4)
     p.add_argument("--heads", type=int, default=4)
     p.add_argument("--hidden", type=int, default=128)

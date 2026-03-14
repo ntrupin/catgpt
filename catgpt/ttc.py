@@ -26,8 +26,26 @@ TAG_CUT_RE = re.compile(r"\s*<(?:USER|THINK|MOOD=|/USER|/THINK).*$", re.IGNORECA
 LAST_MOOD_RE = re.compile(r"<MOOD=(HUNGRY|SLEEPY|GRUMPY|PLAYFUL)>")
 WORD_RE = re.compile(r"[a-z_']+")
 LEVELS = {"low": 0, "mid": 1, "high": 2, "peak": 3}
-DRIVE_KEYS = ("hunger", "energy", "trust", "mischief")
-WORLD_KEYS = ("room", "dream", "focus", "memory", "bowl", "toy", "vacuum", "sunbeam", "box")
+TIMES = ("dawn", "morning", "afternoon", "evening", "night")
+TIME_INDEX = {name: i for i, name in enumerate(TIMES)}
+ATTENTION_LEVELS = {"loose": 0, "curious": 1, "tracking": 2, "locked": 3}
+RESPONSE_LEVELS = {"ignoring": 0, "selective": 1, "present": 2, "eager": 3}
+DRIVE_KEYS = ("hunger", "energy", "trust", "mischief", "inertia")
+WORLD_KEYS = (
+    "time",
+    "room",
+    "dream",
+    "focus",
+    "memory",
+    "body",
+    "attention",
+    "responsiveness",
+    "bowl",
+    "toy",
+    "vacuum",
+    "sunbeam",
+    "box",
+)
 FIELD_ALIASES = {
     "q": "cue",
     "d": "drive",
@@ -37,9 +55,14 @@ FIELD_ALIASES = {
     "e": "energy",
     "t": "trust",
     "m": "mischief",
+    "k": "inertia",
+    "c": "time",
     "r": "room",
     "z": "dream",
     "f": "focus",
+    "i": "attention",
+    "u": "responsiveness",
+    "o": "body",
     "n": "memory",
     "b": "bowl",
     "y": "toy",
@@ -61,9 +84,13 @@ MOTION_STEPS = {
     "spring",
     "trot",
     "vanish",
+    "step_close",
+    "kitchen_trot",
 }
 MISCHIEF_STEPS = {"creep", "paw_test", "push", "swat", "bolt", "launch", "scatter"}
 DREAM_STEPS = {"doze", "drift", "moon_pounce", "cloud_chase", "twitch", "tail_flick", "snore", "paw_kick", "float"}
+OBSERVE_STEPS = {"perch", "ear_flick", "stare", "listen", "track", "watch", "blink", "ear_turn", "still_tail"}
+IGNORE_STEPS = {"ear_flick", "look_away", "stay_put", "keep_watch", "tail_flick", "turn_ear", "resume_stare"}
 DREAM_HINTS = {"dream", "dreaming", "sleep", "sleeping", "nap", "asleep", "twitch", "twitching"}
 OBJECT_HINTS = {
     "bowl": {"food", "treat", "dinner", "breakfast", "kibble", "bowl", "tuna", "eat"},
@@ -71,6 +98,8 @@ OBJECT_HINTS = {
     "vacuum": {"vacuum", "bath", "stranger", "noise", "scary", "door", "loud"},
     "sunbeam": {"nap", "sleep", "rest", "blanket", "bed", "sunbeam", "sleepy", "cozy"},
     "box": {"box", "bite", "cardboard"},
+    "bird": {"bird", "window", "outside", "pigeon", "sparrow"},
+    "hall_noise": {"hall", "hallway", "noise", "rustle", "sound", "outside"},
     "keyboard": {"keyboard", "desk"},
     "glass": {"glass", "desk"},
     "plant": {"plant", "leaves"},
@@ -84,6 +113,14 @@ GENERIC_FOLLOW_UPS = (
     "what did you do over there",
     "is it still there",
 )
+REST_BODIES = {"loaf", "curl", "sprawl", "sun_loaf", "lap_loaf"}
+DREAM_BODIES = {"curl", "sprawl", "twitch"}
+HIDE_BODIES = {"crouch", "under_bed", "flat_ears"}
+PLAY_BODIES = {"crouch", "pounce_ready", "perch"}
+MISCHIEF_BODIES = {"prowl", "perch", "tail_wrap"}
+FOOD_BODIES = {"tail_up", "kitchen_orbit", "counter_peek"}
+AFFECTION_BODIES = {"lap_loaf", "lean", "knead"}
+OBSERVE_BODIES = {"perch", "desk_sphinx", "loaf"}
 
 
 @dataclass
@@ -165,7 +202,7 @@ def sample_continuation(
     idx = torch.tensor([prompt_ids], dtype=torch.long, device=device)
     budget = max_new_tokens
     if prompt.endswith("<THINK>"):
-        budget = max(max_new_tokens, 240)
+        budget = max(max_new_tokens, 300)
 
     stop_token = tokenizer.stoi.get("\n")
     temp = max(temperature, 1e-5)
@@ -211,6 +248,94 @@ def split_plan(plan_text: str | None) -> tuple[str, ...]:
     return tuple(step for step in plan_text.split(">") if step)
 
 
+def value_step(mapping: dict[str, int], prev: str, curr: str) -> int | None:
+    if prev not in mapping or curr not in mapping:
+        return None
+    return mapping[curr] - mapping[prev]
+
+
+def time_step(prev: str, curr: str) -> int | None:
+    if prev not in TIME_INDEX or curr not in TIME_INDEX:
+        return None
+    return (TIME_INDEX[curr] - TIME_INDEX[prev]) % len(TIMES)
+
+
+def room_matches_focus(room: str, focus: str) -> bool:
+    if focus in {"bowl", "counter"}:
+        return room == "kitchen"
+    if focus in {"keyboard", "glass"}:
+        return room == "desk"
+    if focus in {"bird", "sunbeam"}:
+        return room == "window"
+    if focus in {"vacuum", "hall_noise"}:
+        return room == "hallway"
+    if focus == "human":
+        return room in {"sofa", "bedroom"}
+    if focus == "toy":
+        return room in {"living_room", "hallway", "desk"}
+    if focus == "plant":
+        return room in {"living_room", "desk"}
+    if focus == "box":
+        return room in {"hallway", "sofa", "desk"}
+    if focus in {"moon_moth", "ghost_mouse", "cloud_string", "starlight_bowl", "floating_box"}:
+        return room in {"window", "sofa", "bedroom"}
+    return True
+
+
+def action_matches_focus(action: str | None, focus: str | None) -> bool:
+    if not action or not focus:
+        return False
+    if action == "seek food":
+        return focus == "bowl"
+    if action == "play":
+        return focus == "toy"
+    if action == "seek affection":
+        return focus == "human"
+    if action == "hide":
+        return focus == "vacuum"
+    if action == "rest":
+        return focus in {"sunbeam", "blanket"}
+    if action == "dream":
+        return focus in {"moon_moth", "ghost_mouse", "cloud_string", "starlight_bowl", "floating_box"}
+    if action == "make mischief":
+        return focus in {"keyboard", "glass", "plant", "box", "counter"}
+    if action in {"observe", "ignore"}:
+        return focus not in {None, "human"}
+    return False
+
+
+def body_matches_action(
+    body: str | None,
+    action: str | None,
+    state: dict[str, str] | None = None,
+    plan: tuple[str, ...] = (),
+) -> bool:
+    if not body or not action:
+        return True
+    state = state or {}
+    if action == "seek food":
+        return body in FOOD_BODIES
+    if action == "play":
+        return body in PLAY_BODIES
+    if action == "seek affection":
+        return body in AFFECTION_BODIES or (body in REST_BODIES and state.get("focus") == "human")
+    if action == "rest":
+        return body in REST_BODIES or body in DREAM_BODIES
+    if action == "dream":
+        return body in DREAM_BODIES or body in REST_BODIES
+    if action == "hide":
+        return body in HIDE_BODIES
+    if action == "make mischief":
+        return body in MISCHIEF_BODIES
+    if action == "observe":
+        return body in OBSERVE_BODIES or body in PLAY_BODIES
+    if action == "ignore":
+        return body in OBSERVE_BODIES or body in REST_BODIES or body in HIDE_BODIES
+    if any(step in {"curl", "loaf", "doze"} for step in plan):
+        return body in REST_BODIES
+    return True
+
+
 def mood_state_bonus(mood: str | None, state: dict[str, str]) -> float:
     if mood not in MOODS:
         return 0.0
@@ -219,24 +344,43 @@ def mood_state_bonus(mood: str | None, state: dict[str, str]) -> float:
     energy = state.get("energy")
     trust = state.get("trust")
     mischief = state.get("mischief")
+    inertia = state.get("inertia")
     dream = state.get("dream")
+    time_of_day = state.get("time")
     focus = state.get("focus")
     vacuum = state.get("vacuum")
     sunbeam = state.get("sunbeam")
+    body = state.get("body")
+    attention = state.get("attention")
+    responsiveness = state.get("responsiveness")
 
     bonus = 0.0
     if mood == "HUNGRY" and hunger in {"high", "peak"}:
         bonus += 0.06
+    if mood == "HUNGRY" and time_of_day in {"dawn", "morning", "evening"}:
+        bonus += 0.02
     if mood == "SLEEPY" and energy in {"low", "mid"}:
         bonus += 0.05
     if mood == "SLEEPY" and dream in {"drifting", "deep"}:
         bonus += 0.06
     if mood == "SLEEPY" and sunbeam and sunbeam != "gone":
         bonus += 0.02
+    if mood == "SLEEPY" and body in REST_BODIES | DREAM_BODIES:
+        bonus += 0.03
     if mood == "GRUMPY" and (trust == "low" or vacuum == "hallway"):
         bonus += 0.06
-    if mood == "PLAYFUL" and (mischief in {"high", "peak"} or focus in {"toy", "keyboard", "glass", "plant", "box"}):
+    if mood == "GRUMPY" and body in HIDE_BODIES:
+        bonus += 0.03
+    if mood == "PLAYFUL" and (mischief in {"high", "peak"} or focus in {"toy", "keyboard", "glass", "plant", "box", "counter", "bird"}):
         bonus += 0.06
+    if mood == "PLAYFUL" and time_of_day in {"dawn", "night"}:
+        bonus += 0.02
+    if attention in {"tracking", "locked"}:
+        bonus += 0.01
+    if responsiveness in {"ignoring", "selective"} and mood in {"SLEEPY", "GRUMPY"}:
+        bonus += 0.02
+    if inertia in {"high", "peak"} and focus:
+        bonus += 0.01
     return bonus
 
 
@@ -261,6 +405,44 @@ def plan_quality_bonus(action: str | None, plan: tuple[str, ...]) -> float:
         bonus += 0.03
     if action == "rest" and any(step in {"loaf", "curl", "doze", "purr"} for step in plan):
         bonus += 0.03
+    if action == "observe" and any(step in OBSERVE_STEPS for step in plan):
+        bonus += 0.04
+    if action == "ignore" and any(step in IGNORE_STEPS for step in plan):
+        bonus += 0.04
+    return bonus
+
+
+def behavior_fit_bonus(action: str | None, state: dict[str, str], plan: tuple[str, ...]) -> float:
+    if not action:
+        return 0.0
+
+    bonus = 0.0
+    body = state.get("body")
+    time_of_day = state.get("time")
+    focus = state.get("focus")
+    attention = state.get("attention")
+    responsiveness = state.get("responsiveness")
+    inertia = state.get("inertia")
+
+    if body_matches_action(body, action, state, plan):
+        bonus += 0.05
+
+    if action in {"observe", "ignore"} and focus and focus != "human" and attention in {"tracking", "locked"}:
+        bonus += 0.05
+    if action == "ignore" and responsiveness in {"ignoring", "selective"}:
+        bonus += 0.05
+    if action == "observe" and responsiveness in {"selective", "present"}:
+        bonus += 0.03
+    if action == "seek affection" and responsiveness in {"present", "eager"}:
+        bonus += 0.04
+    if action in {"play", "make mischief"} and time_of_day in {"dawn", "night"}:
+        bonus += 0.02
+    if action in {"rest", "dream"} and time_of_day in {"afternoon", "night"}:
+        bonus += 0.02
+    if action == "seek food" and time_of_day in {"dawn", "morning", "evening"}:
+        bonus += 0.02
+    if inertia in {"high", "peak"} and action in {"play", "make mischief", "rest", "hide", "observe", "ignore", "dream"}:
+        bonus += 0.02
     return bonus
 
 
@@ -320,6 +502,7 @@ def parse_candidate(raw: str, avg_logprob: float) -> Candidate:
         score += min(0.16, 0.02 * len(state))
     score += plan_quality_bonus(action, plan)
     score += mood_state_bonus(mood, state)
+    score += behavior_fit_bonus(action, state, plan)
 
     return Candidate(
         raw=line,
@@ -346,6 +529,17 @@ def last_state_from_history(history: str) -> dict[str, str]:
     return extract_fields(matches[-1])
 
 
+def last_action_from_history(history: str) -> str | None:
+    matches = THINK_TAG_RE.findall(history or "")
+    if not matches:
+        return None
+    fields = extract_fields(matches[-1])
+    action = format_action(fields.get("action"))
+    if action:
+        return action
+    return None
+
+
 def user_words(text: str) -> set[str]:
     return set(WORD_RE.findall(text.lower()))
 
@@ -366,7 +560,7 @@ def is_generic_follow_up(text: str) -> bool:
     return {"it", "there", "that"} & words and not message_objects(words)
 
 
-def drive_shift_is_reasonable(key: str, prev: str, curr: str, action: str | None, words: set[str]) -> bool:
+def level_shift_is_reasonable(key: str, prev: str, curr: str, action: str | None, words: set[str]) -> bool:
     prev_i = LEVELS.get(prev)
     curr_i = LEVELS.get(curr)
     if prev_i is None or curr_i is None:
@@ -388,6 +582,45 @@ def drive_shift_is_reasonable(key: str, prev: str, curr: str, action: str | None
         return curr_i <= prev_i
     if key == "mischief" and action in {"play", "make mischief"}:
         return curr_i >= prev_i
+    if key == "inertia" and action in {"play", "make mischief", "rest", "hide", "dream", "observe", "ignore"}:
+        return curr_i >= prev_i
+    return False
+
+
+def time_shift_is_reasonable(prev: str, curr: str, action: str | None) -> bool:
+    step = time_step(prev, curr)
+    if step is None:
+        return True
+    if step in {0, 1}:
+        return True
+    if step == 2 and action in {"rest", "dream"}:
+        return True
+    return False
+
+
+def attention_shift_is_reasonable(prev: str, curr: str, action: str | None) -> bool:
+    step = value_step(ATTENTION_LEVELS, prev, curr)
+    if step is None:
+        return True
+    if abs(step) <= 1:
+        return True
+    if action in {"play", "make mischief", "hide", "seek food", "observe", "ignore"}:
+        return step >= 0
+    if action in {"rest", "dream", "seek affection"}:
+        return step <= 0
+    return False
+
+
+def response_shift_is_reasonable(prev: str, curr: str, action: str | None) -> bool:
+    step = value_step(RESPONSE_LEVELS, prev, curr)
+    if step is None:
+        return True
+    if abs(step) <= 1:
+        return True
+    if action in {"seek affection", "seek food"}:
+        return step >= 0
+    if action in {"ignore", "rest", "dream", "hide"}:
+        return step <= 0
     return False
 
 
@@ -395,16 +628,38 @@ def world_shift_is_reasonable(
     key: str,
     prev: str,
     curr: str,
-    action: str | None,
-    plan: tuple[str, ...],
+    candidate: Candidate,
+    prev_state: dict[str, str],
     words: set[str],
 ) -> bool:
+    action = candidate.action or infer_action(candidate.think, candidate.reply, candidate.mood or "PLAYFUL", candidate.state, candidate.plan)
     if prev == curr:
         return True
+    if key == "time":
+        return time_shift_is_reasonable(prev, curr, action)
     if key == "room":
-        return bool(plan) and any(step in MOTION_STEPS for step in plan)
+        focus = candidate.state.get("focus")
+        if focus and room_matches_focus(curr, focus):
+            return True
+        return bool(candidate.plan) and any(step in MOTION_STEPS for step in candidate.plan)
     if key == "dream":
         return action in {"rest", "dream"} or bool(words & DREAM_HINTS)
+    if key == "focus":
+        mentioned_objects = message_objects(words)
+        prev_focus = prev_state.get("focus")
+        if action_matches_focus(action, curr):
+            return True
+        if mentioned_objects and curr in mentioned_objects:
+            return True
+        if prev_focus and curr == prev_focus and prev_state.get("attention") in {"tracking", "locked"}:
+            return True
+        return False
+    if key == "body":
+        return body_matches_action(curr, action, candidate.state, candidate.plan)
+    if key == "attention":
+        return attention_shift_is_reasonable(prev, curr, action)
+    if key == "responsiveness":
+        return response_shift_is_reasonable(prev, curr, action)
     if key == "bowl":
         return action == "seek food" or bool(words & OBJECT_HINTS["bowl"])
     if key == "toy":
@@ -412,22 +667,22 @@ def world_shift_is_reasonable(
     if key == "vacuum":
         return action == "hide" or bool(words & OBJECT_HINTS["vacuum"])
     if key == "sunbeam":
-        return action == "rest" or bool(words & OBJECT_HINTS["sunbeam"])
+        return action in {"rest", "dream"} or bool(words & OBJECT_HINTS["sunbeam"]) or candidate.state.get("time") in {"dawn", "morning", "afternoon"}
     if key == "box":
         return action in {"make mischief", "rest"} or bool(words & OBJECT_HINTS["box"])
-    if key == "focus":
-        return True
     if key == "memory":
         return True
     return False
 
 
-def continuity_bonus(candidate: Candidate, prev_state: dict[str, str], user_message: str) -> float:
+def continuity_bonus(candidate: Candidate, prev_state: dict[str, str], user_message: str, prev_action: str | None) -> float:
     if not candidate.state:
         return 0.0
 
     words = user_words(user_message)
+    mentioned_objects = message_objects(words)
     generic_follow_up = is_generic_follow_up(user_message)
+    action = candidate.action or infer_action(candidate.think, candidate.reply, candidate.mood or "PLAYFUL", candidate.state, candidate.plan)
     bonus = 0.0
 
     for key in DRIVE_KEYS:
@@ -437,7 +692,7 @@ def continuity_bonus(candidate: Candidate, prev_state: dict[str, str], user_mess
             continue
         if prev == curr:
             bonus += 0.02
-        elif drive_shift_is_reasonable(key, prev, curr, candidate.action, words):
+        elif level_shift_is_reasonable(key, prev, curr, action, words):
             bonus += 0.005
         else:
             bonus -= 0.035
@@ -449,31 +704,47 @@ def continuity_bonus(candidate: Candidate, prev_state: dict[str, str], user_mess
             continue
         if prev == curr:
             bonus += 0.03
-        elif world_shift_is_reasonable(key, prev, curr, candidate.action, candidate.plan, words):
+        elif world_shift_is_reasonable(key, prev, curr, candidate, prev_state, words):
             bonus += 0.006
         else:
             bonus -= 0.045
 
+    prev_focus = prev_state.get("focus")
+    curr_focus = candidate.state.get("focus")
+    curr_memory = candidate.state.get("memory")
     if generic_follow_up:
-        prev_focus = prev_state.get("focus")
-        curr_focus = candidate.state.get("focus")
-        curr_memory = candidate.state.get("memory")
         if prev_focus and (curr_focus == prev_focus or curr_memory == prev_focus or curr_memory == f"still_{prev_focus}"):
             bonus += 0.09
         elif prev_focus and curr_focus and curr_focus != prev_focus:
             bonus -= 0.06
 
-    mentioned_objects = message_objects(words)
+    strong_lock = prev_state.get("inertia") in {"high", "peak"} or prev_state.get("attention") in {"tracking", "locked"}
+    strong_redirect = bool(mentioned_objects and prev_focus and prev_focus not in mentioned_objects)
+    if prev_action and strong_lock and not strong_redirect:
+        if action == prev_action:
+            bonus += 0.08
+        else:
+            bonus -= 0.05
+
+    if prev_focus and curr_focus == prev_focus and strong_lock:
+        bonus += 0.05
+    elif prev_focus and curr_focus and curr_focus != prev_focus and strong_lock and not strong_redirect:
+        bonus -= 0.04
+
+    if prev_state.get("responsiveness") in {"ignoring", "selective"} and action == "ignore" and not mentioned_objects:
+        bonus += 0.05
+    if prev_state.get("responsiveness") == "eager" and action == "ignore" and mentioned_objects:
+        bonus -= 0.03
+
     if words & DREAM_HINTS:
         if candidate.state.get("dream") in {"drifting", "deep"}:
             bonus += 0.05
         else:
             bonus -= 0.03
     if mentioned_objects:
-        focus = candidate.state.get("focus")
-        if focus and focus in mentioned_objects:
+        if curr_focus and curr_focus in mentioned_objects:
             bonus += 0.05
-        elif focus and focus not in mentioned_objects and not generic_follow_up:
+        elif curr_focus and curr_focus not in mentioned_objects and not generic_follow_up and not (strong_lock and curr_focus == prev_focus):
             bonus -= 0.03
 
     return bonus
@@ -481,8 +752,13 @@ def continuity_bonus(candidate: Candidate, prev_state: dict[str, str], user_mess
 
 def cluster_key(candidate: Candidate, prev_state: dict[str, str]) -> tuple[str, str, str]:
     action = candidate.action or infer_action(candidate.think, candidate.reply, candidate.mood or "PLAYFUL", candidate.state, candidate.plan)
-    room = candidate.state.get("room") or prev_state.get("room", "")
-    return (candidate.mood or "PLAYFUL", action, room)
+    anchor = (
+        candidate.state.get("focus")
+        or candidate.state.get("room")
+        or prev_state.get("focus")
+        or prev_state.get("room", "")
+    )
+    return (candidate.mood or "PLAYFUL", action, anchor)
 
 
 def select_candidate(
@@ -490,6 +766,7 @@ def select_candidate(
     prev_mood: str | None,
     mood_inertia: float,
     prev_state: dict[str, str],
+    prev_action: str | None,
     user_message: str,
 ) -> tuple[Candidate, int]:
     parsed = [c for c in candidates if c.mood is not None and c.reply]
@@ -498,7 +775,7 @@ def select_candidate(
         return best, 1
 
     for c in parsed:
-        c.score += continuity_bonus(c, prev_state=prev_state, user_message=user_message)
+        c.score += continuity_bonus(c, prev_state=prev_state, user_message=user_message, prev_action=prev_action)
 
     if prev_mood in MOODS and mood_inertia > 0:
         weights = MOOD_PRIOR[prev_mood]
@@ -512,7 +789,18 @@ def select_candidate(
         for key in weighted_votes:
             weighted_votes[key] += mood_inertia * prior.get(key[0], 0.0)
 
-    top_key = max(weighted_votes.items(), key=lambda kv: (kv[1], kv[0]))[0]
+    cluster_best_scores = {
+        key: max(c.score for c in parsed if cluster_key(c, prev_state) == key)
+        for key in weighted_votes
+    }
+    cluster_avg_scores = {
+        key: sum(c.score for c in parsed if cluster_key(c, prev_state) == key) / votes[key]
+        for key in weighted_votes
+    }
+    top_key = max(
+        weighted_votes,
+        key=lambda key: (weighted_votes[key], cluster_best_scores[key], cluster_avg_scores[key], key),
+    )
     finalists = [c for c in parsed if cluster_key(c, prev_state) == top_key]
     best = max(finalists, key=lambda c: c.score)
     return best, int(votes[top_key])
@@ -532,18 +820,30 @@ def infer_action(
     state = state or {}
     if state.get("dream") in {"drifting", "deep"} or any(step in DREAM_STEPS for step in plan):
         return "dream"
+    if any(step in IGNORE_STEPS for step in plan) and state.get("focus") != "human":
+        return "ignore"
+    if any(step in OBSERVE_STEPS for step in plan) and state.get("focus") not in {None, "human"}:
+        return "observe"
     if plan and any(step in MISCHIEF_STEPS for step in plan):
         return "make mischief"
-    if "hiss" in reply.lower() or mood == "GRUMPY":
+    if state.get("focus") == "vacuum" or state.get("body") in HIDE_BODIES:
         return "hide"
-    if "prr" in reply.lower() or mood == "SLEEPY":
-        return "rest"
-    if mood == "HUNGRY" or state.get("focus") == "bowl":
+    if state.get("focus") == "human":
+        return "seek affection"
+    if state.get("focus") == "bowl" or mood == "HUNGRY":
         return "seek food"
     if state.get("focus") == "toy":
         return "play"
-    if state.get("focus") == "human":
-        return "seek affection"
+    if state.get("focus") in {"keyboard", "glass", "plant", "box", "counter"}:
+        return "make mischief"
+    if state.get("focus") not in {None, "human"} and state.get("attention") in {"tracking", "locked"}:
+        if state.get("responsiveness") in {"ignoring", "selective"}:
+            return "ignore"
+        return "observe"
+    if "hiss" in reply.lower() or (mood == "GRUMPY" and state.get("responsiveness") in {"ignoring", "selective"}):
+        return "hide"
+    if "prr" in reply.lower() or mood == "SLEEPY":
+        return "rest"
     return "social play"
 
 
@@ -560,7 +860,8 @@ def build_rollout_gallery(candidates: list[Candidate], prev_state: dict[str, str
         return []
 
     votes = Counter(cluster_key(c, prev_state) for c in candidates)
-    ranked = sorted(candidates, key=lambda c: (c is best, c.score, c.avg_logprob), reverse=True)
+    # Keep the gallery score-sorted so the TTC-selected sample does not always appear first.
+    ranked = sorted(candidates, key=lambda c: (c.score, c.avg_logprob, c is best), reverse=True)
     gallery: list[Rollout] = []
     for c in ranked:
         action = c.action or infer_action(c.think, c.reply, c.mood or "PLAYFUL", c.state, c.plan)
@@ -611,16 +912,18 @@ def ttc_turn(
 
     prev_mood = last_mood_from_history(history)
     prev_state = last_state_from_history(history)
+    prev_action = last_action_from_history(history)
     best, consensus = select_candidate(
         candidates,
         prev_mood=prev_mood,
         mood_inertia=mood_inertia,
         prev_state=prev_state,
+        prev_action=prev_action,
         user_message=user_message,
     )
     mood = best.mood or "PLAYFUL"
     reply = best.reply or fallback_reply(best.raw)
-    think = best.think or "cue=unknown action=social_play mood=PLAYFUL"
+    think = best.think or "q=unknown d=watch a=observe p=blink>stare h=mid e=mid t=mid m=mid k=mid c=evening r=window z=awake f=bird i=tracking u=selective o=perch n=still_bird"
     state = best.state
     plan = best.plan
     action = best.action or infer_action(think, reply, mood, state=state, plan=plan)

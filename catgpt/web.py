@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--mode", default="reasoning", choices=["reasoning", "instant"])
     p.add_argument("--temperature", type=float, default=0.9)
     p.add_argument("--top-k", type=int, default=20)
-    p.add_argument("--max-new-tokens", type=int, default=240)
+    p.add_argument("--max-new-tokens", type=int, default=300)
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--reasoning-rollouts", type=int, default=8)
     p.add_argument("--mood-inertia", type=float, default=0.35)

@@ -211,19 +211,6 @@ h2 {
   animation: pulse 900ms ease-in-out infinite;
 }
 
-.ttc-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 10px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  letter-spacing: 0.01em;
-  text-transform: lowercase;
-  background: #fff3d9;
-  border: 1px solid #f0d39c;
-  color: #775625;
-}
-
 .workspace {
   margin-top: 14px;
   flex: 1;

@@ -12,9 +12,27 @@ from .ttc import missing_reasoning_chars, ttc_turn
 
 
 def state_summary(state: dict[str, str]) -> str:
-    order = ("room", "dream", "focus", "hunger", "energy", "trust", "mischief", "bowl", "toy", "vacuum", "sunbeam", "box")
+    order = (
+        "time",
+        "room",
+        "dream",
+        "focus",
+        "body",
+        "attention",
+        "responsiveness",
+        "hunger",
+        "energy",
+        "trust",
+        "mischief",
+        "inertia",
+        "bowl",
+        "toy",
+        "vacuum",
+        "sunbeam",
+        "box",
+    )
     bits = [f"{key}={state[key]}" for key in order if key in state]
-    return " ".join(bits[:6])
+    return " ".join(bits[:8])
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--mode", default="reasoning", choices=["reasoning", "instant"])
     p.add_argument("--temperature", type=float, default=0.9)
     p.add_argument("--top-k", type=int, default=20)
-    p.add_argument("--max-new-tokens", type=int, default=240)
+    p.add_argument("--max-new-tokens", type=int, default=300)
     p.add_argument("--message", default=None)
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("--reasoning-rollouts", type=int, default=8)
